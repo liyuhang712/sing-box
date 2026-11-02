@@ -277,4 +277,7 @@ git submodule update --init --recursive
 
 ## 外部依赖边界
 
+
 这个仓库大量使用 `github.com/sagernet/sing` 提供的网络、元数据、生命周期和服务框架，也使用 `github.com/sagernet/sing-tun` 实现 TUN 相关能力。部分底层概念和辅助类型不在当前仓库中，遇到以 `sing/` 或 `sing-tun` 开头的 import 时，需要到相应依赖中继续追踪。
+
+liyuhang
