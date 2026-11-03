@@ -20,6 +20,12 @@
       "tag": "mixed-in",
       "listen": "127.0.0.1",
       "listen_port": 10808
+    },
+    {
+      "type": "socks",
+      "tag": "socks-in",
+      "listen": "127.0.0.1",
+      "listen_port": 10809
     }
   ],
   "outbounds": [
@@ -29,6 +35,11 @@
     }
   ],
   "route": {
+    "rules": [
+      {
+        "action": "sniff"
+      }
+    ],
     "final": "direct"
   },
   "endpoints": [],
