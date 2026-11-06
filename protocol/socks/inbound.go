@@ -21,6 +21,7 @@ import (
 	"github.com/sagernet/sing/protocol/socks"
 )
 
+// RegisterInbound 注册 SOCKS 入站类型及其构造函数。
 func RegisterInbound(registry *inbound.Registry) {
 	inbound.Register[option.SocksInboundOptions](registry, C.TypeSOCKS, NewInbound)
 }
@@ -36,6 +37,7 @@ type Inbound struct {
 	udpTimeout    time.Duration
 }
 
+// NewInbound 创建 SOCKS 入站实例，并初始化认证、路由和 TCP 监听配置。
 func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.SocksInboundOptions) (adapter.Inbound, error) {
 	var udpTimeout time.Duration
 	if options.UDPTimeout != 0 {
@@ -60,6 +62,7 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
 	return inbound, nil
 }
 
+// Start 在启动阶段启动入站监听器，并注册其清理函数。
 func (h *Inbound) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	if stage != adapter.StartStateStart {
 		return nil
@@ -72,6 +75,7 @@ func (h *Inbound) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	return nil
 }
 
+// NewConnection 处理新的 TCP 连接，执行 SOCKS 握手并将连接交给后续处理。
 func (h *Inbound) NewConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
 	err := socks.HandleConnectionEx(ctx, conn, std_bufio.NewReader(conn), h.authenticator, adapter.NewUpstreamHandler(metadata, h.newUserConnection, h.streamUserPacketConnection), h.listener, h.udpTimeout, metadata.Source, onClose)
 	N.CloseOnHandshakeFailure(conn, onClose, err)
@@ -84,6 +88,7 @@ func (h *Inbound) NewConnection(ctx context.Context, conn net.Conn, metadata ada
 	}
 }
 
+// newUserConnection 在路由 TCP 连接前补充入站和用户元数据。
 func (h *Inbound) newUserConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
 	metadata.Inbound = h.Tag()
 	metadata.InboundType = h.Type()
@@ -98,6 +103,7 @@ func (h *Inbound) newUserConnection(ctx context.Context, conn net.Conn, metadata
 	h.router.RouteConnectionEx(ctx, conn, metadata, onClose)
 }
 
+// streamUserPacketConnection 在路由 UDP 包连接前补充入站、用户和原始目标元数据。
 func (h *Inbound) streamUserPacketConnection(ctx context.Context, conn N.PacketConn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
 	metadata.Inbound = h.Tag()
 	metadata.InboundType = h.Type()

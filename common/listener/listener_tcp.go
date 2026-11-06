@@ -65,6 +65,7 @@ func (l *Listener) ListenTCP() (net.Listener, error) {
 			})
 		})
 	}
+	/******真正开始监听的地方*************/
 	tcpListener, err := ListenNetworkNamespace[net.Listener](l.ctx, l.listenOptions.NetNs, func() (net.Listener, error) {
 		if l.listenOptions.TCPFastOpen {
 			var tfoConfig tfo.ListenConfig
