@@ -74,7 +74,9 @@ func (r *Router) RouteConnectionEx(ctx context.Context, conn net.Conn, metadata 
 	}
 }
 
+// routeConnection 根据入站元数据和路由规则处理 TCP 连接，并将连接交给选中的出站。
 func (r *Router) routeConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) error {
+	// 指定了入站绕行时，将连接重新注入目标入站，并检查路由循环和入站类型。
 	//nolint:staticcheck
 	if metadata.InboundDetour != "" {
 		if metadata.LastInbound == metadata.InboundDetour {
@@ -95,6 +97,7 @@ func (r *Router) routeConnection(ctx context.Context, conn net.Conn, metadata ad
 		return nil
 	}
 	metadata.Network = N.NetworkTCP
+	// 拒绝已不支持的全局多路复用和 UoT 特殊目标地址。
 	switch metadata.Destination.Fqdn {
 	case mux.Destination.Fqdn:
 		return E.New("global multiplex is deprecated since sing-box v1.7.0, enable multiplex in Inbound fields instead.")
@@ -105,10 +108,12 @@ func (r *Router) routeConnection(ctx context.Context, conn net.Conn, metadata ad
 	case uot.LegacyMagicAddress:
 		return E.New("global UoT (legacy) not supported since sing-box v1.7.0.")
 	}
+	// TUN 入站识别出的 DNS 流量直接交给 DNS 劫持处理。
 	if metadata.InboundType == C.TypeTun && metadata.Protocol == C.ProtocolDNS {
 		N.CloseOnHandshakeFailure(conn, onClose, r.hijackDNSStream(ctx, conn, metadata))
 		return nil
 	}
+	// 必要时包装连接以支持读取超时，再匹配路由规则；buffers 保存匹配过程中读取的数据。
 	if deadline.NeedAdditionalReadDeadline(conn) {
 		conn = deadline.NewConn(conn)
 	}
@@ -118,6 +123,7 @@ func (r *Router) routeConnection(ctx context.Context, conn net.Conn, metadata ad
 	}
 	var selectedOutbound adapter.Outbound
 	if selectedRule != nil {
+		// 根据匹配规则的动作选择出站、拒绝连接或劫持 DNS。
 		switch action := selectedRule.Action().(type) {
 		case *R.RuleActionRoute:
 			var loaded bool
@@ -143,6 +149,7 @@ func (r *Router) routeConnection(ctx context.Context, conn net.Conn, metadata ad
 			}
 			return action.Error(ctx)
 		case *R.RuleActionHijackDNS:
+			// 将规则匹配时读出的数据放回连接，供 DNS 处理继续读取。
 			for _, buffer := range buffers {
 				conn = bufio.NewCachedConn(conn, buffer)
 			}
@@ -150,6 +157,7 @@ func (r *Router) routeConnection(ctx context.Context, conn net.Conn, metadata ad
 			return nil
 		}
 	}
+	// 没有匹配到规则时使用默认出站，然后解析出站组，得到实际出站链。
 	if selectedRule == nil {
 		selectedOutbound = r.outbound.Default()
 	}
@@ -158,9 +166,11 @@ func (r *Router) routeConnection(ctx context.Context, conn net.Conn, metadata ad
 		buf.ReleaseMulti(buffers)
 		return err
 	}
+	// 将匹配规则时读取的数据重新包装到连接中，避免后续转发丢失数据。
 	for _, buffer := range buffers {
 		conn = bufio.NewCachedConn(conn, buffer)
 	}
+	// 记录路由结果，并让已注册的跟踪器包装连接。
 	if selectedRule != nil {
 		metadata.RouteRule = selectedRule.String()
 	}
@@ -169,12 +179,14 @@ func (r *Router) routeConnection(ctx context.Context, conn net.Conn, metadata ad
 	for _, tracker := range r.trackers {
 		conn = tracker.RoutedConnection(ctx, conn, metadata, selectedRule, selectedOutbound)
 	}
+	// 标记外部连接并注册出站组的中断处理，然后将连接交给最终出站。
 	ctx = interrupt.ContextWithIsExternalConnection(ctx, true)
 	onClose = registerInterrupt(chain, conn, onClose)
 	outbound := chain[len(chain)-1]
 	if outboundHandler, isHandler := outbound.(adapter.ConnectionHandler); isHandler {
 		outboundHandler.NewConnection(ctx, conn, metadata, onClose)
 	} else {
+		// 出站没有提供连接处理方法时，由连接管理器负责建立和转发连接。
 		r.connection.NewConnection(ctx, outbound, conn, metadata, onClose)
 	}
 	return nil
