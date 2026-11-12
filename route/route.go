@@ -57,13 +57,18 @@ func (r *Router) RouteConnection(ctx context.Context, conn net.Conn, metadata ad
 	return nil
 }
 
+// RouteConnectionEx 处理一个 TCP 入站连接，并在路由处理失败时关闭连接、记录错误。
 func (r *Router) RouteConnectionEx(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
+	// 执行实际路由：根据连接元数据匹配规则，并选择对应的出站或其他处理方式。
 	err := r.routeConnection(ctx, conn, metadata, onClose)
 	if err != nil {
+		// 路由失败时通知关闭回调并关闭连接，避免连接留在未完成的握手状态。
 		N.CloseOnHandshakeFailure(conn, onClose, err)
 		if E.IsClosedOrCanceled(err) || R.IsRejected(err) {
+			// 主动取消、连接关闭或规则拒绝属于预期结束，使用调试级别记录。
 			r.logger.DebugContext(ctx, "connection closed: ", err)
 		} else {
+			// 其他错误通常表示路由或连接处理异常，使用错误级别记录。
 			r.logger.ErrorContext(ctx, err)
 		}
 	}
