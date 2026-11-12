@@ -234,6 +234,7 @@ func New(options Options) (*Box, error) {
 	httpClientManager := httpclient.NewManager(ctx, logFactory.NewLogger("httpclient"), options.HTTPClients, routeOptions.DefaultHTTPClient)
 	service.MustRegister[adapter.HTTPClientManager](ctx, httpClientManager)
 	httpClientService := adapter.LifecycleService(httpClientManager)
+	//创建路由
 	router := route.NewRouter(ctx, logFactory, routeOptions, dnsOptions)
 	service.MustRegister[adapter.Router](ctx, router)
 	err = router.Initialize(routeOptions.Rules, routeOptions.RuleSet)
@@ -316,6 +317,7 @@ func New(options Options) (*Box, error) {
 		} else {
 			tag = F.ToString(i)
 		}
+		//进入inbound
 		err = inboundManager.Create(
 			ctx,
 			router,
