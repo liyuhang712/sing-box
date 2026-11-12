@@ -15,9 +15,9 @@ import (
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	R "github.com/sagernet/sing-box/route/rule"
-	"github.com/sagernet/sing-mux"
-	"github.com/sagernet/sing-tun"
-	"github.com/sagernet/sing-vmess"
+	mux "github.com/sagernet/sing-mux"
+	tun "github.com/sagernet/sing-tun"
+	vmess "github.com/sagernet/sing-vmess"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/buf"
 	"github.com/sagernet/sing/common/bufio"
@@ -586,8 +586,12 @@ func (r *Router) preMatchFlow(ctx context.Context, metadata *adapter.InboundCont
 	return result
 }
 
+// prepareMatchMetadata 在规则匹配前补全连接元数据。
+// 它只负责准备进程、来源邻居、域名映射和 IP 版本等信息，不负责选择出站。
 func (r *Router) prepareMatchMetadata(ctx context.Context, metadata *adapter.InboundContext) error {
+	// 查询连接所属进程，供 process_name 等规则条件使用。
 	r.searchProcessInfo(ctx, metadata)
+	// 对有效的来源地址尝试补全邻居 MAC 地址和主机名。
 	if r.neighborResolver != nil && metadata.SourceMACAddress == nil && metadata.Source.Addr.IsValid() {
 		mac, macFound := r.neighborResolver.LookupMAC(metadata.Source.Addr)
 		if macFound {
@@ -605,6 +609,7 @@ func (r *Router) prepareMatchMetadata(ctx context.Context, metadata *adapter.Inb
 			r.logger.InfoContext(ctx, "found neighbor: ", mac)
 		}
 	}
+	// 将 FakeIP 还原为原始域名；非 FakeIP 目标则尝试补全反向映射域名。
 	if metadata.Destination.Addr.IsValid() && r.dnsTransport.FakeIP() != nil && r.dnsTransport.FakeIP().Store().Contains(metadata.Destination.Addr) {
 		domain, loaded := r.dnsTransport.FakeIP().Store().Lookup(metadata.Destination.Addr)
 		if !loaded {
@@ -626,6 +631,7 @@ func (r *Router) prepareMatchMetadata(ctx context.Context, metadata *adapter.Inb
 			r.logger.DebugContext(ctx, "found reserve mapped domain: ", metadata.Domain)
 		}
 	}
+	// 记录目标 IP 版本，供 ip_version 规则条件使用。
 	if metadata.Destination.IsIPv4() {
 		metadata.IPVersion = 4
 	} else if metadata.Destination.IsIPv6() {
@@ -634,6 +640,9 @@ func (r *Router) prepareMatchMetadata(ctx context.Context, metadata *adapter.Inb
 	return nil
 }
 
+// matchRule 按配置顺序匹配路由规则，并返回首个终止规则及匹配过程中缓存的数据。
+// sniff 和 resolve 是前置动作，执行后遍历仍会继续；只有 route、reject、
+// hijack-dns 或带出站的 bypass 会终止匹配。
 func (r *Router) matchRule(
 	ctx context.Context, metadata *adapter.InboundContext,
 	inputConn net.Conn, inputPacketConn N.PacketConn,
@@ -646,6 +655,7 @@ func (r *Router) matchRule(
 		return
 	}
 
+	// 按配置顺序逐条匹配规则；每条规则使用独立的匹配缓存。
 match:
 	for currentRuleIndex, currentRule := range r.rules {
 		metadata.ResetRuleCache()
@@ -658,6 +668,7 @@ match:
 		} else {
 			r.logger.DebugContext(ctx, "match[", currentRuleIndex, "] => ", currentRule.Action())
 		}
+		// 规则匹配后先应用 route options，使后续动作和出站使用覆盖后的元数据。
 		var routeOptions *R.RuleActionRouteOptions
 		switch action := currentRule.Action().(type) {
 		case *R.RuleActionRoute:
@@ -711,8 +722,11 @@ match:
 				metadata.TLSSpoofMethod = routeOptions.TLSSpoofMethod
 			}
 		}
+		// 执行嗅探和地址解析等前置动作；它们会修改元数据，但不会立即选择出站。
 		switch action := currentRule.Action().(type) {
+		//对类型进行断言
 		case *R.RuleActionSniff:
+			// 这里执行实际的流或数据包嗅探，并保存已读取的数据供后续转发使用。
 			newBuffer, newPacketBuffers, newErr := r.actionSniff(ctx, metadata, action, inputConn, inputPacketConn, buffers, packetBuffers)
 			if newBuffer != nil {
 				buffers = append(buffers, newBuffer)
@@ -729,6 +743,7 @@ match:
 				return
 			}
 		}
+		// 只有终止动作会记录当前规则并结束匹配；sniff 和 resolve 会继续遍历。
 		actionType := currentRule.Action().Type()
 		if actionType == C.RuleActionTypeRoute ||
 			actionType == C.RuleActionTypeReject ||
@@ -739,6 +754,7 @@ match:
 		}
 		if actionType == C.RuleActionTypeBypass {
 			bypassAction := currentRule.Action().(*R.RuleActionBypass)
+			// 不带出站的 bypass 仅修改路由选项，需要继续匹配后续规则。
 			if bypassAction.Outbound == "" {
 				continue match
 			}

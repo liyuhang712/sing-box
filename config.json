@@ -37,7 +37,8 @@
   "route": {
     "rules": [
       {
-        "action": "sniff"
+        "action": "sniff",
+        "sniffer": ["tls"]
       }
     ],
     "final": "direct"
