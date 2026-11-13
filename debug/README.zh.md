@@ -4,14 +4,14 @@
 不需要证书、TUN 或管理员权限，不会自动修改系统代理。
 
 ```text
-curl / 浏览器 → mixed 客户端 127.0.0.1:10808
+curl / 浏览器 → SOCKS 客户端 127.0.0.1:10808
                    ├─ 国内域名 / 国内 IP / 私有 IP → direct → 目标
                    └─ 其他 → Shadowsocks 127.0.0.1:8388 → direct → 目标
 ```
 
 | 文件 | 用途 |
 | --- | --- |
-| `debug/client.json` | mixed 入站（HTTP/SOCKS5）、本地规则集、direct 和 Shadowsocks 出站 |
+| `debug/client.json` | SOCKS 入站（SOCKS4/4a/5）、本地规则集、direct 和 Shadowsocks 出站 |
 | `debug/server.json` | Shadowsocks 入站、direct 出站 |
 | `.vscode/launch.json` | 分别启动两端，或使用“本地双端”同时调试 |
 
@@ -58,7 +58,7 @@ go run ./cmd/sing-box check -c debug/client.json
 
 ```text
 inbound/shadowsocks[ss-in]: tcp server started at 127.0.0.1:8388
-inbound/mixed[mixed-in]: tcp server started at 127.0.0.1:10808
+inbound/socks[socks-in]: tcp server started at 127.0.0.1:10808
 ```
 
 两端设置了固定工作目录和不同的调试二进制输出文件，避免相对路径错误和同时编译覆盖。
@@ -91,9 +91,10 @@ curl --max-time 20 --noproxy "" --proxy socks5h://127.0.0.1:10808 http://223.5.5
 # 默认 Shadowsocks 转发，预期两端都有对应连接日志
 curl --max-time 20 --noproxy "" --proxy socks5h://127.0.0.1:10808 https://example.com
 
-# 同一 mixed 入站也支持 HTTP 代理（HTTPS 请求会使用 CONNECT）
-curl --max-time 20 --noproxy "" --proxy http://127.0.0.1:10808 https://example.com
 ```
+
+应用的代理类型选择 SOCKS5，地址为 `127.0.0.1`，端口为 `10808`，无需用户名或密码。
+入站仅支持 SOCKS；通过 SOCKS 代理仍然可以访问 HTTP 和 HTTPS 网站。
 
 `--noproxy ""` 排除环境变量 `NO_PROXY` 导致的绕过；`socks5h` 将目标域名交给 sing-box，
 以便参与域名分流。普通 `socks5` 通常由 curl 先解析，客户端可能只收到 IP，无法按原域名匹配 geosite。
@@ -192,8 +193,9 @@ outbound/direct[direct]: outbound connection to <目标地址>:443
 | DNS 错误或公网请求超时 | 检查系统 DNS 和本机网络；先用上面的本地 HTTP 测试隔离问题 |
 | VS Code 无法启动调试 | 检查 Go 扩展、Go/Delve 版本；先用终端方式验证配置 |
 
-2026-11-13 使用当前源码、Go 1.27.3 在本机完成：两份配置检查、双端启动、HTTP/SOCKS5 混合入站、
+2026-11-13 切换 SOCKS 入站前，使用当前源码、Go 1.27.3 在本机完成：两份配置检查、双端启动、HTTP/SOCKS5 混合入站、
 geosite/geoip 直连、example.com 和 1.1.1.1 默认代理、本地 HTTP 完整 Shadowsocks 往返、
 服务端解析 localhost、停止服务端后代理失败而直连可用，以及停止后两个 TCP 端口释放。
 测试临时配置、日志和 HTTP 服务均已清理。VS Code 图形界面的 F5 操作尚未实际执行。
 本轮验收针对 TCP；未测试 UDP。配置文件没有关闭协议默认的 UDP 支持。
+随后客户端改为 SOCKS 入站（`socks-in`），保留 `127.0.0.1:10808`，并重新通过配置检查。
