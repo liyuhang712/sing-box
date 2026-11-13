@@ -22,3 +22,6 @@
 CLAUDE.md
 AGENTS.md
 /.claude/
+/debug/rules/*.srs
+/.debug-client
+/.debug-server

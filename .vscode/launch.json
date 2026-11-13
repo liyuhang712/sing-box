@@ -17,6 +17,33 @@
             ],
             // 如果你的配置文件需要 root 权限才能绑定端口或创建 TUN 网卡，可以开启下面这行（Mac/Linux下会弹窗输入密码）
             // "sudo": true 
+        },
+        {
+            "name": "本地客户端",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceFolder}/cmd/sing-box",
+            "cwd": "${workspaceFolder}",
+            "output": "${workspaceFolder}/.debug-client",
+            "args": ["run", "-c", "${workspaceFolder}/debug/client.json"]
+        },
+        {
+            "name": "本地服务端",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceFolder}/cmd/sing-box",
+            "cwd": "${workspaceFolder}",
+            "output": "${workspaceFolder}/.debug-server",
+            "args": ["run", "-c", "${workspaceFolder}/debug/server.json"]
+        }
+    ],
+    "compounds": [
+        {
+            "name": "本地双端",
+            "configurations": ["本地服务端", "本地客户端"],
+            "stopAll": true
         }
     ]
 }

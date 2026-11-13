@@ -1,0 +1,38 @@
+{
+  "log": {
+    "level": "debug",
+    "timestamp": true
+  },
+  "dns": {
+    "servers": [
+      {
+        "type": "local",
+        "tag": "local-dns"
+      }
+    ],
+    "strategy": "prefer_ipv4"
+  },
+  "inbounds": [
+    {
+      "type": "shadowsocks",
+      "tag": "ss-in",
+      "listen": "127.0.0.1",
+      "listen_port": 8388,
+      "method": "2022-blake3-aes-128-gcm",
+      "password": "BxsIguqIA+Y7hpsuFADHRg=="
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "route": {
+    "default_domain_resolver": {
+      "server": "local-dns",
+      "strategy": "prefer_ipv4"
+    },
+    "final": "direct"
+  }
+}
