@@ -23,20 +23,26 @@ curl / 浏览器 → SOCKS 客户端 127.0.0.1:10808
 
 **以下所有终端命令都在仓库根目录执行。** 本地规则路径相对于进程工作目录，而不是 JSON 所在目录。
 
-旧的 `geoip`、`geosite` 配置字段已在 sing-box 1.12 移除。这里使用对应的 `.srs` 规则集，
+旧的 `geoip`、`geosite` 配置字段已在 sing-box 1.12 移除。这里使用可读的 JSON 规则集，
 不需要 `geoip.db`、`geosite.db`。
 
-按手动下载方式准备两个文件（需要能访问 GitHub）：
+客户端直接加载 `debug/rules/geoip-cn.json` 和 `debug/rules/geosite-cn.json`，
+可以在编辑器中查看完整 IP 网段、域名、域名后缀及正则表达式。已有 JSON 时无需再次下载或转换。
+JSON 文件不添加 Git 忽略规则，方便阅读和版本管理。
+
+首次准备或手动更新数据时，下载二进制来源并反编译成 JSON（下载需要能访问 GitHub）：
 
 ```sh
 mkdir -p debug/rules
 curl -fL --retry 3 -o debug/rules/geoip-cn.srs https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-cn.srs
 curl -fL --retry 3 -o debug/rules/geosite-cn.srs https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-cn.srs
+go run ./cmd/sing-box rule-set decompile debug/rules/geoip-cn.srs -o debug/rules/geoip-cn.json
+go run ./cmd/sing-box rule-set decompile debug/rules/geosite-cn.srs -o debug/rules/geosite-cn.json
 ```
 
-本次配置已在当前工作区下载这两个文件；它们被 Git 忽略，新检出仓库时仍需下载。
-客户端以 `type: local`、`format: binary` 加载，服务端不加载规则。文件缺失或损坏会报错，不会静默绕过。
-下载一次后启动不再联网获取规则，也不会自动更新；更新时停止客户端，重新下载并检查后再启动。
+本地 `.srs` 保留作为转换来源，客户端实际以 `type: local`、`format: source` 加载 JSON，服务端不加载规则。
+JSON 比二进制大，但便于学习源码和修改规则；文件缺失或损坏会报错，不会静默绕过。
+启动不联网获取规则，也不会自动更新；更新时停止客户端，重新下载、转换并执行配置检查后再启动。
 如果需要自动下载和定期更新，sing-box 也支持 `type: remote`；本示例按手动方式配置。
 
 ## 2. 检查和启动
@@ -116,9 +122,9 @@ curl --max-time 20 --noproxy "" --proxy socks5h://127.0.0.1:10808 https://exampl
 路由以实际规则数据和 DNS 结果为准，可以先确认样例是否命中：
 
 ```sh
-go run ./cmd/sing-box rule-set match -f binary debug/rules/geosite-cn.srs www.baidu.com
-go run ./cmd/sing-box rule-set match -f binary debug/rules/geoip-cn.srs 223.5.5.5
-go run ./cmd/sing-box rule-set match -f binary debug/rules/geosite-cn.srs example.com
+go run ./cmd/sing-box rule-set match -f source debug/rules/geosite-cn.json www.baidu.com
+go run ./cmd/sing-box rule-set match -f source debug/rules/geoip-cn.json 223.5.5.5
+go run ./cmd/sing-box rule-set match -f source debug/rules/geosite-cn.json example.com
 ```
 
 命中会输出 `match rules...`，不命中不输出；不能仅用退出码区分。example.com 还会继续接受解析后的 IP 检查。
@@ -185,7 +191,7 @@ outbound/direct[direct]: outbound connection to <目标地址>:443
 
 | 现象 | 检查 |
 | --- | --- |
-| `no such file` 或规则解析失败 | 是否从仓库根目录启动、两个 `.srs` 是否正确下载；重新执行 `check` |
+| `no such file` 或规则解析失败 | 是否从仓库根目录启动、两个 JSON 是否正确生成或编辑；重新执行 `check` |
 | `address already in use` | 是否同时启动了终端和 VS Code 实例；修改端口时同步修改客户端服务器端口 |
 | 连接 `127.0.0.1:8388` 被拒绝 | 服务端是否启动完成、是否被断点暂停或已经退出 |
 | Shadowsocks 认证失败 | 两端 method、password 是否完全一致，2022 密钥是否为正确长度的 Base64 |
@@ -199,3 +205,7 @@ geosite/geoip 直连、example.com 和 1.1.1.1 默认代理、本地 HTTP 完整
 测试临时配置、日志和 HTTP 服务均已清理。VS Code 图形界面的 F5 操作尚未实际执行。
 本轮验收针对 TCP；未测试 UDP。配置文件没有关闭协议默认的 UDP 支持。
 随后客户端改为 SOCKS 入站（`socks-in`），保留 `127.0.0.1:10808`，并重新通过配置检查。
+规则集随后从现有 `.srs` 完整转换为 JSON，客户端已通过文本规则加载检查。
+对 GeoIP 的 `223.5.5.5`、`114.114.114.114`、`1.1.1.1`、`127.0.0.1`，
+以及 Geosite 的 `www.baidu.com`、`www.bilibili.com`、`example.com`、`localhost`，
+逐项对比了转换前后的命中结果，均一致；此次格式切换未重新执行网络链路测试。

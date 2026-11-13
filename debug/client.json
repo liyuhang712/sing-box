@@ -43,14 +43,14 @@
       {
         "type": "local",
         "tag": "geosite-cn",
-        "format": "binary",
-        "path": "debug/rules/geosite-cn.srs"
+        "format": "source",
+        "path": "debug/rules/geosite-cn.json"
       },
       {
         "type": "local",
         "tag": "geoip-cn",
-        "format": "binary",
-        "path": "debug/rules/geoip-cn.srs"
+        "format": "source",
+        "path": "debug/rules/geoip-cn.json"
       }
     ],
     "rules": [
