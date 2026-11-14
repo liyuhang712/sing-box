@@ -659,6 +659,7 @@ func (r *Router) matchRule(
 match:
 	for currentRuleIndex, currentRule := range r.rules {
 		metadata.ResetRuleCache()
+		//匹配规则
 		if !currentRule.Match(metadata) {
 			continue
 		}
