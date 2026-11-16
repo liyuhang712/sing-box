@@ -106,8 +106,10 @@ func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, co
 		err        error
 	)
 	if len(metadata.DestinationAddresses) > 0 || metadata.Destination.IsIP() {
+		//ip
 		remoteConn, err = dialer.DialSerialNetwork(ctx, this, N.NetworkTCP, metadata.Destination, metadata.DestinationAddresses, metadata.NetworkStrategy, metadata.NetworkType, metadata.FallbackNetworkType, metadata.FallbackDelay)
 	} else {
+		//域名
 		remoteConn, err = this.DialContext(ctx, N.NetworkTCP, metadata.Destination)
 	}
 	if err != nil {

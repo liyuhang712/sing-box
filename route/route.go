@@ -184,6 +184,7 @@ func (r *Router) routeConnection(ctx context.Context, conn net.Conn, metadata ad
 	onClose = registerInterrupt(chain, conn, onClose)
 	outbound := chain[len(chain)-1]
 	if outboundHandler, isHandler := outbound.(adapter.ConnectionHandler); isHandler {
+		//只有dns的outbound才会实现ConnectionHandler接口，其他的outbound都是交给连接管理器来处理
 		outboundHandler.NewConnection(ctx, conn, metadata, onClose)
 	} else {
 		// 出站没有提供连接处理方法时，由连接管理器负责建立和转发连接。
