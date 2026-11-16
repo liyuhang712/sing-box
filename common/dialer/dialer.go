@@ -43,6 +43,7 @@ func NewWithOptions(options Options) (N.Dialer, error) {
 		dialer N.Dialer
 		err    error
 	)
+	// 优先使用指定的 detour；未指定时，可选择默认出站，或按拨号选项创建直接拨号器。
 	hasDetour := dialOptions.Detour != "" || options.DefaultOutbound
 	if dialOptions.Detour != "" {
 		outboundManager := service.FromContext[adapter.OutboundManager](options.Context)
@@ -62,6 +63,7 @@ func NewWithOptions(options Options) (N.Dialer, error) {
 			return nil, err
 		}
 	}
+	// 远端可能是域名时，按 detour 和解析器配置决定是否由解析拨号器负责解析。
 	if options.RemoteIsDomain && (!hasDetour || options.ResolverOnDetour || dialOptions.DomainResolver != nil && dialOptions.DomainResolver.Server != "") {
 		var (
 			server          string
@@ -69,6 +71,7 @@ func NewWithOptions(options Options) (N.Dialer, error) {
 		)
 		hasDomainResolver := dialOptions.DomainResolver != nil && dialOptions.DomainResolver.Server != ""
 		if options.DirectResolver {
+			// 直接解析域名服务器地址时必须显式指定 resolver，避免再通过 DNS transport 解析它。
 			if !hasDomainResolver {
 				return nil, E.New("missing domain resolver for domain server address")
 			}

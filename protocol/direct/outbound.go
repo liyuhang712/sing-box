@@ -151,6 +151,7 @@ func (h *Outbound) isMyLoopbackAddress(addresses ...netip.Addr) bool {
 	return false
 }
 
+// DialContext 在 direct 出站被路由选中、需要建立普通连接时调用。
 func (h *Outbound) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
 	if h.isMyLoopbackAddress(destination.Addr) {
 		return nil, E.New("loopback connection to TUN range")
@@ -214,6 +215,7 @@ func (h *Outbound) WritePackets(packets [][]byte) error {
 	return h.icmpPort.WritePackets(packets)
 }
 
+// DialParallel 在调用方通过 N.ParallelDialer 接口并行尝试多个候选 IP 地址时调用。
 func (h *Outbound) DialParallel(ctx context.Context, network string, destination M.Socksaddr, destinationAddresses []netip.Addr) (net.Conn, error) {
 	if h.isMyLoopbackAddress(destinationAddresses...) {
 		return nil, E.New("loopback connection to TUN range")
@@ -231,6 +233,7 @@ func (h *Outbound) DialParallel(ctx context.Context, network string, destination
 	return dialer.DialParallelNetwork(ctx, h.dialer, network, destination, destinationAddresses, len(destinationAddresses) > 0 && destinationAddresses[0].Is6(), nil, nil, nil, h.fallbackDelay)
 }
 
+// DialParallelNetwork 在调用方通过 ParallelNetworkDialer 接口并行拨号，并指定网络策略或接口类型等参数时调用。
 func (h *Outbound) DialParallelNetwork(ctx context.Context, network string, destination M.Socksaddr, destinationAddresses []netip.Addr, networkStrategy *C.NetworkStrategy, networkType []C.InterfaceType, fallbackNetworkType []C.InterfaceType, fallbackDelay time.Duration) (net.Conn, error) {
 	if h.isMyLoopbackAddress(destinationAddresses...) {
 		return nil, E.New("loopback connection to TUN range")
