@@ -15,7 +15,7 @@ import (
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/dialer"
 	"github.com/sagernet/sing-box/common/sniff"
-	"github.com/sagernet/sing-box/common/tlsfragment"
+	tf "github.com/sagernet/sing-box/common/tlsfragment"
 	"github.com/sagernet/sing-box/common/tlsspoof"
 	"github.com/sagernet/sing-box/common/urltest"
 	C "github.com/sagernet/sing-box/constant"
@@ -102,7 +102,7 @@ func (m *ConnectionManager) TrackPacketConn(conn net.PacketConn) net.PacketConn 
 func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
 	ctx = adapter.WithContext(ctx, &metadata)
 	var (
-		remoteConn net.Conn
+		remoteConn net.Conn //出站连接
 		err        error
 	)
 	if len(metadata.DestinationAddresses) > 0 || metadata.Destination.IsIP() {
@@ -159,6 +159,7 @@ func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, co
 	if m.kickWriteHandshake(ctx, remoteConn, conn, serverFirst, true, &done, onClose) {
 		return
 	}
+	// 开启两个协程，一个负责上传，一个负责下载,inbound和outbound之间的数据传输
 	go m.connectionCopy(ctx, conn, remoteConn, false, &done, onClose)
 	go m.connectionCopy(ctx, remoteConn, conn, true, &done, onClose)
 }

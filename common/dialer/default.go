@@ -31,20 +31,28 @@ var (
 )
 
 type DefaultDialer struct {
-	dialer4                tfo.Dialer
-	dialer6                tfo.Dialer
-	udpDialer4             net.Dialer
-	udpDialer6             net.Dialer
-	udpListener            net.ListenConfig
-	udpAddr4               string
-	udpAddr6               string
-	netns                  string
-	autoDetectBindFunc     control.Func
-	connectionManager      adapter.ConnectionManager
-	networkManager         adapter.NetworkManager
-	powerManager           *powerreport.Manager
-	outboundManager        adapter.OutboundManager
-	dnsTransportManager    adapter.DNSTransportManager
+	dialer4             tfo.Dialer
+	dialer6             tfo.Dialer
+	udpDialer4          net.Dialer
+	udpDialer6          net.Dialer
+	udpListener         net.ListenConfig
+	udpAddr4            string
+	udpAddr6            string
+	netns               string
+	autoDetectBindFunc  control.Func
+	connectionManager   adapter.ConnectionManager
+	networkManager      adapter.NetworkManager
+	powerManager        *powerreport.Manager
+	outboundManager     adapter.OutboundManager
+	dnsTransportManager adapter.DNSTransportManager
+	/***
+		• d.networkStrategy 是网卡选择策略，不是 TCP/UDP 协议类型。它决定拨号时如何挑选可用的网络接口（例如
+	  Wi‑Fi、蜂窝网络、以太网），相关取值定义在 constant/network.go (constant/network.go:35)：
+
+	  • default：优先用默认网络接口；也可以通过 network_type 限定接口类型。
+	  • hybrid：把符合条件的接口作为主选接口并行尝试。
+	  • fallback：先尝试主选接口，失败或经过延迟后再尝试备用接口；备用接口可由 fallback_network_typ
+		**/
 	networkStrategy        *C.NetworkStrategy
 	defaultNetworkStrategy bool
 	networkType            []C.InterfaceType
@@ -268,21 +276,27 @@ func setMarkWrapper(networkManager adapter.NetworkManager, mark uint32, isDefaul
 }
 
 func (d *DefaultDialer) DialContext(ctx context.Context, network string, address M.Socksaddr) (net.Conn, error) {
+	// 这是默认拨号器的分流入口，不直接负责所有场景下的 socket 建立。
+	// 调用方须先解析域名；本方法只接受有效的 IP 地址。
 	if !address.IsValid() {
 		return nil, E.New("invalid address")
 	} else if address.IsDomain() {
 		return nil, E.New("domain not resolved")
 	}
 	if d.networkStrategy == nil {
+		// 未配置网卡选择策略时，在指定网络命名空间中按地址族和网络类型选择 dialer。
 		conn, err := listener.ListenNetworkNamespace[net.Conn](ctx, d.netns, func() (net.Conn, error) {
 			switch N.NetworkName(network) {
 			case N.NetworkUDP:
+				// UDP 使用 net.Dialer；这里会直接发起 UDP 拨号，不经过 TCP Fast Open 路径。
 				if !address.IsIPv6() {
 					return d.udpDialer4.DialContext(ctx, network, address.String())
 				} else {
 					return d.udpDialer6.DialContext(ctx, network, address.String())
 				}
 			}
+			// UDP 以外的网络使用 DialSlowContext。TCP 未启用 TFO 时立即调用底层
+			// DialContext；启用 TFO 时先返回延迟连接，首次写入数据时才真正发起连接。
 			if !address.IsIPv6() {
 				return DialSlowContext(&d.dialer4, ctx, d.netns, network, address)
 			} else {
@@ -291,6 +305,8 @@ func (d *DefaultDialer) DialContext(ctx context.Context, network string, address
 		})
 		return d.trackConn(ctx, address, conn, err)
 	} else {
+		// 配置了网卡选择策略时交由并行网卡拨号路径；底层 net.Dialer 在该路径中拨号，
+		// 不会回到本方法，也不经过上面的 DialSlowContext。
 		return d.DialParallelInterface(ctx, network, address, d.networkStrategy, d.networkType, d.fallbackNetworkType, d.networkFallbackDelay)
 	}
 }
